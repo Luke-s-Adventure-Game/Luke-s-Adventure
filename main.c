@@ -13,6 +13,11 @@
 #define MAX_CORACOES 5
 #define MAX_VIDAS 5
 
+// === NOVO ===: constantes para o lançador de rede
+#define MAX_REDES 10
+#define REDE_W 24
+#define REDE_H 12
+
 typedef struct {
     SDL_Rect ret;
     bool solido;
@@ -39,25 +44,15 @@ typedef struct {
     bool ativo;
 } Inimigo;
 
+// === NOVO ===: estrutura do projétil (rede)
+typedef struct {
+    SDL_Rect ret;
+    int velocidade; // pode ser negativa para ir para a esquerda
+    bool ativo;
+} Rede;
+
 bool colidem(SDL_Rect a, SDL_Rect b) {
     return SDL_HasIntersection(&a, &b);
-}
-
-bool podeLevantar(Character c, Obstaculo* obstaculos, int qtdObs) {
-    if (!c.abaixando)
-        return true;
-
-    SDL_Rect hitbox = c.ret;
-    int dif = 50; // diferença entre abaixado (50) e em pé (100)
-    hitbox.y -= dif; // simula levantar
-    hitbox.h += dif;
-
-    for (int i = 0; i < qtdObs; i++) {
-        if (!obstaculos[i].solido) continue;
-        if (colidem(hitbox, obstaculos[i].ret))
-            return false;
-    }
-    return true;
 }
 
 int main(int argc, char **argv) {
@@ -88,10 +83,10 @@ int main(int argc, char **argv) {
 
     SDL_Color textColor = {255, 255, 255, 255};
 
-    srand(time(NULL));
+    srand((unsigned)time(NULL));
 
     // --- Personagem ---
-     Character Luke;
+    Character Luke;
     Luke.ret.w = 50;
     Luke.ret.h = 100;
     Luke.ret.x = 100;
@@ -130,6 +125,17 @@ int main(int argc, char **argv) {
 
     Uint32 ultimoSpawn = SDL_GetTicks();
 
+    // === NOVO ===: redes (projéteis)
+    Rede redes[MAX_REDES];
+    for (int i = 0; i < MAX_REDES; i++) {
+        redes[i].ativo = false;
+        redes[i].ret = (SDL_Rect){0,0,REDE_W,REDE_H};
+        redes[i].velocidade = 0;
+    }
+
+    // === NOVO ===: contador de inimigos destruídos
+    int contadorInimigosMortos = 0;
+
     //---Estados de tecla---
     bool esqPress = false, dirPress = false, baixoPress = false, puloPress = false;
     bool rodando = true;
@@ -147,6 +153,26 @@ int main(int argc, char **argv) {
                     case SDL_SCANCODE_RIGHT: dirPress = true; break;
                     case SDL_SCANCODE_DOWN: baixoPress = true; break;
                     case SDL_SCANCODE_SPACE: puloPress = true; break;
+                    // === NOVO ===: disparo da rede com tecla X
+                    case SDL_SCANCODE_X: {
+                        // determina direção de disparo: -1 (esq) ou 1 (dir). Se parado, dispara para a direita.
+                        int facing = (dirPress ? 1 : (esqPress ? -1 : 1));
+                        // busca slot livre
+                        for (int idx = 0; idx < MAX_REDES; idx++) {
+                            if (!redes[idx].ativo) {
+                                // posiciona a rede na frente do personagem
+                                if (facing > 0) {
+                                    redes[idx].ret.x = Luke.ret.x + Luke.ret.w;
+                                } else {
+                                    redes[idx].ret.x = Luke.ret.x - REDE_W;
+                                }
+                                redes[idx].ret.y = Luke.ret.y + Luke.ret.h/2 - REDE_H/2;
+                                redes[idx].velocidade = 12 * facing;
+                                redes[idx].ativo = true;
+                                break;
+                            }
+                        }
+                    } break;
                 }
             }
             if (e.type == SDL_KEYUP) {
@@ -192,12 +218,6 @@ int main(int argc, char **argv) {
                         Luke.pulando = false;
                         noChao = true;
                     }
-                     else if (Luke.velY < 0 && Luke.ret.y < obstaculos[i].ret.y + obstaculos[i].ret.h) {
-                        Luke.ret.y = obstaculos[i].ret.y + obstaculos[i].ret.h;
-                        Luke.velY = 0;
-                        Luke.pulando = true;
-                        noChao = false;
-                    }
                 }
             }
         } else {
@@ -219,7 +239,7 @@ int main(int argc, char **argv) {
                 Luke.ret.h = 50;
                 Luke.ret.y += 50;
             }
-        } else if (Luke.abaixando && podeLevantar(Luke, obstaculos, qtdObs)) {
+        } else if (Luke.abaixando) {
             Luke.abaixando = false;
             Luke.ret.y -= 50;
             Luke.ret.h = 100;
@@ -256,7 +276,42 @@ int main(int argc, char **argv) {
             }
         }
 
-        // --- Dano por colisão ---
+        // === NOVO ===: atualizar redes (movimentação + desativar quando fora da tela)
+        for (int r = 0; r < MAX_REDES; r++) {
+            if (!redes[r].ativo) continue;
+            redes[r].ret.x += redes[r].velocidade;
+            if (redes[r].ret.x > WINDOW_LARG || (redes[r].ret.x + redes[r].ret.w) < 0) {
+                redes[r].ativo = false;
+            }
+        }
+
+        // === NOVO ===: colisão entre redes e inimigos
+        for (int r = 0; r < MAX_REDES; r++) {
+            if (!redes[r].ativo) continue;
+            for (int i = 0; i < MAX_INIMIGOS; i++) {
+                if (!inimigos[i].ativo) continue;
+                if (colidem(redes[r].ret, inimigos[i].ret)) {
+                    // destrói inimigo e rede
+                    inimigos[i].ativo = false;
+                    redes[r].ativo = false;
+
+                    // incrementa contador total de inimigos destruídos
+                    contadorInimigosMortos++;
+
+                    // só concede vida quando na FASE 2 e a cada 2 inimigos mortos
+                    if (faseAtual == 2 && (contadorInimigosMortos % 2) == 0) {
+                        if (Luke.vidas < MAX_VIDAS) {
+                            Luke.vidas++;
+                        }
+                    }
+
+                    // quebra para evitar múltiplas colisões com a mesma rede
+                    break;
+                }
+            }
+        }
+
+        // --- Dano por colisão (player) ---
         if (Luke.invencivel > 0) Luke.invencivel--;
         for (int i = 0; i < MAX_INIMIGOS; i++) {
             if (inimigos[i].ativo && colidem(Luke.ret, inimigos[i].ret) && Luke.invencivel == 0) {
@@ -313,6 +368,16 @@ int main(int argc, char **argv) {
             SDL_RenderFillRect(renderer, &inimTela);
         }
 
+        // === NOVO ===: desenhar redes por cima (projéteis)
+        SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+        for (int r = 0; r < MAX_REDES; r++) {
+            if (!redes[r].ativo) continue;
+            SDL_Rect redeTela = redes[r].ret;
+            // em fase 1, ajustar posição em relação à câmera se necessário (se as redes usam coordenadas world)
+            if (faseAtual == 1) redeTela.x -= cameraX;
+            SDL_RenderFillRect(renderer, &redeTela);
+        }
+
         // Porta (apenas fase 1)
         if (faseAtual == 1) {
             SDL_SetRenderDrawColor(renderer, 0, 200, 0, 255);
@@ -330,6 +395,8 @@ int main(int argc, char **argv) {
                 Luke.velY = 0;
                 cameraX = 0;
                 for (int i = 0; i < MAX_INIMIGOS; i++) inimigos[i].ativo = false;
+                // opcional: resetar contador se desejar (a lógica atual mantém o acumulado)
+                // contadorInimigosMortos = 0;
             }
         }
 
@@ -341,7 +408,7 @@ int main(int argc, char **argv) {
         SDL_Rect lukeTela = {Luke.ret.x - (faseAtual == 1 ? cameraX : 0), Luke.ret.y, Luke.ret.w, Luke.ret.h};
         SDL_RenderFillRect(renderer, &lukeTela);
 
-        // --- HUD ---
+        // --- HUD (tela de alerta)---
         int margem = 20;
         int coracaoTam = 25;
         for (int i = 0; i < MAX_CORACOES; i++) {
@@ -362,35 +429,35 @@ int main(int argc, char **argv) {
         SDL_RenderFillRect(renderer, &faseRect);
 
         // Texto numérico ao lado dos corações
-if (font) {
-    char buf[32];
-    SDL_Surface *surf = NULL;
-    SDL_Texture *tex = NULL;
-    int tw, th;
+        if (font) {
+            char buf[32];
+            SDL_Surface *surf = NULL;
+            SDL_Texture *tex = NULL;
+            int tw, th;
 
-    // contador de corações (ex: "x3")
-    snprintf(buf, sizeof(buf), "x%d", Luke.coracoes);
-    surf = TTF_RenderText_Solid(font, buf, textColor);
-    tex = SDL_CreateTextureFromSurface(renderer, surf);
-    SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
-    SDL_Rect dstCor = { margem + MAX_CORACOES * (coracaoTam + 5) + 10, margem, tw, th };
-    SDL_RenderCopy(renderer, tex, NULL, &dstCor);
-    SDL_FreeSurface(surf);
-    SDL_DestroyTexture(tex);
+            // contador de corações (ex: "x3")
+            snprintf(buf, sizeof(buf), "x%d", Luke.coracoes);
+            surf = TTF_RenderText_Solid(font, buf, textColor);
+            tex = SDL_CreateTextureFromSurface(renderer, surf);
+            SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
+            SDL_Rect dstCor = { margem + MAX_CORACOES * (coracaoTam + 5) + 10, margem, tw, th };
+            SDL_RenderCopy(renderer, tex, NULL, &dstCor);
+            SDL_FreeSurface(surf);
+            SDL_DestroyTexture(tex);
 
-    // contador de vidas (ex: "Vidas: 2")
-    snprintf(buf, sizeof(buf), "Vidas: %d", Luke.vidas);
-    surf = TTF_RenderText_Solid(font, buf, textColor);
-    tex = SDL_CreateTextureFromSurface(renderer, surf);
-    SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
-    SDL_Rect dstVidas = { margem, margem + 60, tw, th };
-    SDL_RenderCopy(renderer, tex, NULL, &dstVidas);
-    SDL_FreeSurface(surf);
-    SDL_DestroyTexture(tex);
-}
+            // contador de vidas (ex: "Vidas: 2")
+            snprintf(buf, sizeof(buf), "Vidas: %d", Luke.vidas);
+            surf = TTF_RenderText_Solid(font, buf, textColor);
+            tex = SDL_CreateTextureFromSurface(renderer, surf);
+            SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
+            SDL_Rect dstVidas = { margem, margem + 60, tw, th };
+            SDL_RenderCopy(renderer, tex, NULL, &dstVidas);
+            SDL_FreeSurface(surf);
+            SDL_DestroyTexture(tex);
+        }
 
-    SDL_RenderPresent(renderer);
-    SDL_Delay(16);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(16);
     }
     if (font) TTF_CloseFont(font);
     TTF_Quit();
@@ -399,6 +466,7 @@ if (font) {
     SDL_Quit();
     return 0;
 }
+
 
 
 
