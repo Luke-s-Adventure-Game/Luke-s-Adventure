@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <SDL2/SDL_ttf.h>
 
 #define WINDOW_LARG 1000
 #define WINDOW_ALT 600
@@ -14,7 +13,7 @@
 #define MAX_VIDAS 5
 
 //Constantes para o lançador de rede
-#define MAX_REDES 10
+#define MAX_REDES 50
 #define REDE_W 24
 #define REDE_H 12
 
@@ -34,6 +33,7 @@ typedef struct {
     int coracoes;
     int vidas;
     int invencivel;
+    int facing; //direita = 1, esquerda = -1
 } Character;
 
 typedef struct {
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
         SDL_Quit();
         return 1;
     }
-
+/*
     if (TTF_Init() == -1) {
         printf("Erro TTF_Init: %s\n", TTF_GetError());
     }
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
     if (!font) {
         printf("Erro ao abrir fonte: %s\n", TTF_GetError());
     }
-
+*/
     SDL_Color textColor = {255, 255, 255, 255};
 
     srand((unsigned)time(NULL));
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
     Luke.ret.h = 100;
     Luke.ret.x = 100;
     Luke.ret.y = WINDOW_ALT - 150;
-    Luke.veloc = 5;
+    Luke.veloc = 10;
     Luke.velPulo = -15;
     Luke.velY = 0;
     Luke.pulando = false;
@@ -117,6 +117,7 @@ int main(int argc, char **argv) {
     Luke.coracoes = MAX_CORACOES;
     Luke.vidas = MAX_VIDAS;
     Luke.invencivel = 0;
+    Luke.facing = 1;
 
     // --- Controle de fase ---
     int faseAtual = 1;
@@ -151,7 +152,7 @@ int main(int argc, char **argv) {
         redes[i].velocidade = 0;
     }
 
-    //Contador de inimigos destruídos -- não seria capturados???
+    //Contador de inimigos destruídos --
     int contadorInimigosMortos = 0;
 
     //---Estados de tecla---
@@ -174,8 +175,8 @@ int main(int argc, char **argv) {
                     
                     // Disparo da rede com tecla X
                     case SDL_SCANCODE_X: {
-                        // determina direção de disparo: -1 (esq) ou 1 (dir). Se parado, dispara para a direita.
-                        int facing = (dirPress ? 1 : (esqPress ? -1 : 1));
+                        // determina direção de disparo de acordo com pra onde o personagem está olhando
+                        int facing = Luke.facing;
                         // busca slot livre
                         for (int idx = 0; idx < MAX_REDES; idx++) {
                             if (!redes[idx].ativo) {
@@ -207,6 +208,8 @@ int main(int argc, char **argv) {
         // --- Movimento horizontal ---
         int movimentoX = (dirPress - esqPress) * Luke.veloc;
         Luke.ret.x += movimentoX;
+        if (movimentoX > 0) Luke.facing = 1;
+        else if (movimentoX < 0) Luke.facing = -1;
 
         // --- Colisão lateral ---
         for (int i = 0; i < qtdObs && faseAtual == 1; i++) {
@@ -309,7 +312,7 @@ int main(int argc, char **argv) {
         for (int r = 0; r < MAX_REDES; r++) {
             if (!redes[r].ativo) continue;
             redes[r].ret.x += redes[r].velocidade;
-            if (redes[r].ret.x > WINDOW_LARG || (redes[r].ret.x + redes[r].ret.w) < 0) {
+            if (redes[r].ret.x > faseLargura || (redes[r].ret.x + redes[r].ret.w) < 0) {
                 redes[r].ativo = false;
             }
         }
@@ -373,10 +376,22 @@ int main(int argc, char **argv) {
         SDL_SetRenderDrawColor(renderer, 20, 20, 70, 255);
         SDL_RenderClear(renderer);
 
-        // Fundo
-        SDL_SetRenderDrawColor(renderer, 40, 40, 120, 255);
-        SDL_Rect fundo = {0, 0, WINDOW_LARG, WINDOW_ALT};
-        SDL_RenderFillRect(renderer, &fundo);
+        // 🎨 Fundo estático — NÃO se move com a câmera
+        SDL_SetRenderDrawColor(renderer, 80, 120, 200, 255); // Céu azul
+        SDL_Rect ceu = {0, 0, WINDOW_LARG, WINDOW_ALT};
+        SDL_RenderFillRect(renderer, &ceu);
+
+        // Montanhas (ficam paradas)
+        SDL_SetRenderDrawColor(renderer, 100, 100, 120, 255);
+        SDL_Rect montanha1 = {100, WINDOW_ALT - 200, 300, 200};
+        SDL_Rect montanha2 = {700, WINDOW_ALT - 250, 400, 250};
+        SDL_RenderFillRect(renderer, &montanha1);
+        SDL_RenderFillRect(renderer, &montanha2);
+
+        // Sol (também fixo na tela)
+        SDL_SetRenderDrawColor(renderer, 255, 255, 100, 255);
+        SDL_Rect sol = {WINDOW_LARG - 150, 100, 80, 80};
+        SDL_RenderFillRect(renderer, &sol);
 
         // Fase 1: obstáculos
         if (faseAtual == 1) {
@@ -460,7 +475,7 @@ int main(int argc, char **argv) {
         SDL_SetRenderDrawColor(renderer, 200, 200, 0, 255);
         SDL_Rect faseRect = {WINDOW_LARG - 150, margem, 100, 20};
         SDL_RenderFillRect(renderer, &faseRect);
-
+/*
         // Texto numérico ao lado dos corações
         if (font) {
             char buf[32];
@@ -488,12 +503,14 @@ int main(int argc, char **argv) {
             SDL_FreeSurface(surf);
             SDL_DestroyTexture(tex);
         }
-
+*/
         SDL_RenderPresent(renderer);
         SDL_Delay(16);
     }
+/*
     if (font) TTF_CloseFont(font);
     TTF_Quit();
+*/    
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
