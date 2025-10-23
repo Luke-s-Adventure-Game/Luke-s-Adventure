@@ -363,8 +363,17 @@ int main(int argc, char **argv) {
             }
         }
 
-        // --- Câmera ---
-        cameraX = Luke.ret.x - WINDOW_LARG / 2 + Luke.ret.w / 2;
+        // Limita Luke aos limites da fase
+        if (Luke.ret.x < 0) {
+            Luke.ret.x = 0;
+        }
+        if (Luke.ret.x + Luke.ret.w > faseLargura)
+            Luke.ret.x = faseLargura - Luke.ret.w;
+
+        // Atualiza e limita a câmera
+        cameraX = Luke.ret.x + Luke.ret.w / 2 - WINDOW_LARG / 2;
+
+        // Impede a câmera de sair dos limites da fase
         if (cameraX < 0) {
             cameraX = 0;
         }
