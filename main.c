@@ -13,7 +13,7 @@
 #define MAX_CORACOES 5
 #define MAX_VIDAS 5
 
-// === NOVO ===: constantes para o lançador de rede
+//Constantes para o lançador de rede
 #define MAX_REDES 10
 #define REDE_W 24
 #define REDE_H 12
@@ -44,7 +44,7 @@ typedef struct {
     bool ativo;
 } Inimigo;
 
-// === NOVO ===: estrutura do projétil (rede)
+//Estrutura do projétil (rede)
 typedef struct {
     SDL_Rect ret;
     int velocidade; // pode ser negativa para ir para a esquerda
@@ -126,10 +126,10 @@ int main(int argc, char **argv) {
     // --- Obstáculos fase 1 ---
     Obstaculo obstaculos[MAX_OBSTACULOS];
     int qtdObs = 0;
-    obstaculos[qtdObs++] = (Obstaculo){{0, WINDOW_ALT - 50, faseLargura, 50}, true, false};
+    obstaculos[qtdObs++] = (Obstaculo){{0, WINDOW_ALT - 50, faseLargura, 50}, true, false};    //chão
     obstaculos[qtdObs++] = (Obstaculo){{600, WINDOW_ALT - 120, 100, 20}, true, true};
     obstaculos[qtdObs++] = (Obstaculo){{1000, WINDOW_ALT - 200, 150, 20}, true, true};
-    obstaculos[qtdObs++] = (Obstaculo){{1300, WINDOW_ALT - 280, 150, 20}, true, true};
+    obstaculos[qtdObs++] = (Obstaculo){{1300, WINDOW_ALT - 250, 150, 20}, true, true};
     obstaculos[qtdObs++] = (Obstaculo){{2000, WINDOW_ALT - 120, 100, 20}, true, true};
     
     SDL_Rect porta = {2800, WINDOW_ALT - 150, 50, 100};
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
 
     Uint32 ultimoSpawn = SDL_GetTicks();
 
-    // === NOVO ===: redes (projéteis)
+    //Projéteis ("redes") -- acho que vale transformar isso aqui em um power up
     Rede redes[MAX_REDES];
     for (int i = 0; i < MAX_REDES; i++) {
         redes[i].ativo = false;
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
         redes[i].velocidade = 0;
     }
 
-    // === NOVO ===: contador de inimigos destruídos
+    //Contador de inimigos destruídos -- não seria capturados???
     int contadorInimigosMortos = 0;
 
     //---Estados de tecla---
@@ -171,7 +171,8 @@ int main(int argc, char **argv) {
                     case SDL_SCANCODE_RIGHT: dirPress = true; break;
                     case SDL_SCANCODE_DOWN: baixoPress = true; break;
                     case SDL_SCANCODE_SPACE: puloPress = true; break;
-                    // === NOVO ===: disparo da rede com tecla X
+                    
+                    // Disparo da rede com tecla X
                     case SDL_SCANCODE_X: {
                         // determina direção de disparo: -1 (esq) ou 1 (dir). Se parado, dispara para a direita.
                         int facing = (dirPress ? 1 : (esqPress ? -1 : 1));
@@ -211,8 +212,12 @@ int main(int argc, char **argv) {
         for (int i = 0; i < qtdObs && faseAtual == 1; i++) {
             if (!obstaculos[i].solido) continue;
             if (colidem(Luke.ret, obstaculos[i].ret)) {
-                if (movimentoX > 0) Luke.ret.x = obstaculos[i].ret.x - Luke.ret.w;
-                else if (movimentoX < 0) Luke.ret.x = obstaculos[i].ret.x + obstaculos[i].ret.w;
+                if (movimentoX > 0) {
+                    Luke.ret.x = obstaculos[i].ret.x - Luke.ret.w;
+                }
+                else if (movimentoX < 0) {
+                    Luke.ret.x = obstaculos[i].ret.x + obstaculos[i].ret.w;
+                }
             }
         }
 
@@ -226,7 +231,7 @@ int main(int argc, char **argv) {
         Luke.velY += GRAVIDADE;
 
         bool noChao = false;
-       if (faseAtual == 1) {
+        if (faseAtual == 1) {
             for (int i = 0; i < qtdObs; i++) {
                 if (!obstaculos[i].solido) continue;
                 if (colidem(Luke.ret, obstaculos[i].ret)) {
@@ -300,7 +305,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        // === NOVO ===: atualizar redes (movimentação + desativar quando fora da tela)
+        // Atualizar redes (movimentação + desativar quando fora da tela)
         for (int r = 0; r < MAX_REDES; r++) {
             if (!redes[r].ativo) continue;
             redes[r].ret.x += redes[r].velocidade;
@@ -309,7 +314,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        // === NOVO ===: colisão entre redes e inimigos
+        // Colisão entre redes e inimigos
         for (int r = 0; r < MAX_REDES; r++) {
             if (!redes[r].ativo) continue;
             for (int i = 0; i < MAX_INIMIGOS; i++) {
@@ -322,21 +327,22 @@ int main(int argc, char **argv) {
                     // incrementa contador total de inimigos destruídos
                     contadorInimigosMortos++;
 
-                    // só concede vida quando na FASE 2 e a cada 2 inimigos mortos
-                    if (faseAtual == 2 && (contadorInimigosMortos % 2) == 0) {
+                    // ALTERAÇÃO: tirei a restrição de só conceder vidas na fase 2 e coloquei pra dar vidas a cada 10 inimigos mortos
+                    if (contadorInimigosMortos % 10 == 0) {
                         if (Luke.vidas < MAX_VIDAS) {
                             Luke.vidas++;
                         }
                     }
-
                     // quebra para evitar múltiplas colisões com a mesma rede
                     break;
                 }
             }
         }
 
-        // --- Dano por colisão (player) ---
-        if (Luke.invencivel > 0) Luke.invencivel--;
+        // --- Dano por colisão (jogador) ---
+        if (Luke.invencivel > 0) {
+            Luke.invencivel--;
+        }
         for (int i = 0; i < MAX_INIMIGOS; i++) {
             if (inimigos[i].ativo && colidem(Luke.ret, inimigos[i].ret) && Luke.invencivel == 0) {
                 Luke.coracoes--;
@@ -356,9 +362,12 @@ int main(int argc, char **argv) {
 
         // --- Câmera ---
         cameraX = Luke.ret.x - WINDOW_LARG / 2 + Luke.ret.w / 2;
-        if (cameraX < 0) cameraX = 0;
-        if (cameraX > faseLargura - WINDOW_LARG)
+        if (cameraX < 0) {
+            cameraX = 0;
+        }
+        if (cameraX > faseLargura - WINDOW_LARG) {
             cameraX = faseLargura - WINDOW_LARG;
+        }
 
         // --- Renderização ---
         SDL_SetRenderDrawColor(renderer, 20, 20, 70, 255);
@@ -392,7 +401,7 @@ int main(int argc, char **argv) {
             SDL_RenderFillRect(renderer, &inimTela);
         }
 
-        // === NOVO ===: desenhar redes por cima (projéteis)
+        // Desenhar redes por cima (projéteis)
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
         for (int r = 0; r < MAX_REDES; r++) {
             if (!redes[r].ativo) continue;
@@ -402,7 +411,7 @@ int main(int argc, char **argv) {
             SDL_RenderFillRect(renderer, &redeTela);
         }
 
-        // Porta (apenas fase 1)
+        // Porta -- implementar pra terceira fase também
         if (faseAtual == 1) {
             SDL_SetRenderDrawColor(renderer, 0, 200, 0, 255);
             SDL_Rect portaTela = porta;
@@ -432,7 +441,7 @@ int main(int argc, char **argv) {
         SDL_Rect lukeTela = {Luke.ret.x - (faseAtual == 1 ? cameraX : 0), Luke.ret.y, Luke.ret.w, Luke.ret.h};
         SDL_RenderFillRect(renderer, &lukeTela);
 
-        // --- HUD (tela de alerta)---
+        // --- HUD (barra de informações)---
         int margem = 20;
         int coracaoTam = 25;
         for (int i = 0; i < MAX_CORACOES; i++) {
@@ -490,9 +499,3 @@ int main(int argc, char **argv) {
     SDL_Quit();
     return 0;
 }
-
-
-
-
-
-
